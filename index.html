@@ -1,0 +1,1503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Reader" />
+  <title>Reader</title>
+  <link rel="apple-touch-icon" href="icon.png" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;1,400&family=DM+Mono:wght@300;400&display=swap" rel="stylesheet" />
+
+  <style>
+    :root {
+      --bg:          #18140f;
+      --warm:        #f2ead9;
+      --amber:       #d9882a;
+      --amber-soft:  rgba(217,136,42,0.15);
+      --green:       #4aaf72;
+      --red:         #d94040;
+      --dim:         rgba(242,234,217,0.45);
+      --overlay:     rgba(18,14,10,0.80);
+      --safe-top:    env(safe-area-inset-top, 44px);
+      --safe-bottom: env(safe-area-inset-bottom, 34px);
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box; margin: 0; padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: #000;
+      font-family: 'DM Mono', monospace;
+      color: var(--warm);
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    /* ── SPLASH ─────────────────────────────────────── */
+    #splash {
+      position: fixed; inset: 0;
+      background: var(--bg);
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 28px;
+      padding: 48px 36px;
+    }
+
+    #splash h1 {
+      font-family: 'Lora', serif;
+      font-size: 52px;
+      font-weight: 400;
+      letter-spacing: -0.01em;
+      color: var(--warm);
+      text-align: center;
+    }
+
+    #splash p {
+      font-size: 16px;
+      font-weight: 300;
+      line-height: 1.7;
+      color: var(--dim);
+      text-align: center;
+      max-width: 300px;
+    }
+
+    #splash-btn {
+      background: var(--amber);
+      color: #18140f;
+      border: none;
+      border-radius: 16px;
+      padding: 22px 56px;
+      font-family: 'DM Mono', monospace;
+      font-size: 15px;
+      font-weight: 400;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      cursor: pointer;
+      margin-top: 8px;
+      transition: opacity 0.15s;
+    }
+    #splash-btn:active { opacity: 0.8; }
+
+    .splash-hint {
+      font-size: 12px;
+      color: rgba(242,234,217,0.25);
+      letter-spacing: 0.08em;
+      text-align: center;
+    }
+
+    /* ── CAMERA ──────────────────────────────────────── */
+    #camera-wrap {
+      position: fixed; inset: 0;
+      background: #000;
+    }
+
+    #video {
+      position: absolute; inset: 0;
+      width: 100%; height: 100%;
+      object-fit: cover;
+    }
+
+    /* ── VIEWFINDER ──────────────────────────────────── */
+    #viewfinder {
+      position: fixed; inset: 0;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    .vf-corner {
+      position: absolute;
+      width: 32px; height: 32px;
+      border-color: rgba(217,136,42,0.6);
+      border-style: solid;
+      transition: border-color 0.4s, opacity 0.4s;
+    }
+    .vf-corner.tl { top: 20%; left: 6%;  border-width: 2px 0 0 2px; border-radius: 4px 0 0 0; }
+    .vf-corner.tr { top: 20%; right: 6%; border-width: 2px 2px 0 0; border-radius: 0 4px 0 0; }
+    .vf-corner.bl { bottom: 34%; left: 6%;  border-width: 0 0 2px 2px; border-radius: 0 0 0 4px; }
+    .vf-corner.br { bottom: 34%; right: 6%; border-width: 0 2px 2px 0; border-radius: 0 0 4px 0; }
+
+    #viewfinder.scanning .vf-corner {
+      border-color: var(--amber);
+      animation: corner-pulse 1.2s ease-in-out infinite alternate;
+    }
+    #viewfinder.locked .vf-corner {
+      border-color: var(--green);
+    }
+    #viewfinder.captured .vf-corner {
+      border-color: var(--green);
+      animation: corner-flash 0.25s ease-out 3;
+    }
+    @keyframes corner-pulse {
+      from { opacity: 0.6; transform: scale(0.94); }
+      to   { opacity: 1.0; transform: scale(1.05); }
+    }
+    @keyframes corner-flash {
+      0%   { opacity: 1; transform: scale(1.1); }
+      50%  { opacity: 0.4; transform: scale(0.96); }
+      100% { opacity: 1; transform: scale(1); }
+    }
+
+    /* ── CAPTURE BADGE ───────────────────────────────── */
+    #capture-badge {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) scale(0.8);
+      background: rgba(74,175,114,0.92);
+      color: #fff;
+      font-family: 'Lora', serif;
+      font-size: 22px;
+      font-weight: 500;
+      padding: 18px 36px;
+      border-radius: 18px;
+      z-index: 45;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+      letter-spacing: 0.02em;
+      text-align: center;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+    }
+    #capture-badge.show {
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1);
+    }
+    #capture-badge .badge-sub {
+      display: block;
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      font-weight: 300;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      margin-top: 4px;
+      opacity: 0.8;
+    }
+
+    #scan-line {
+      position: absolute;
+      left: 6%; right: 6%;
+      top: 20%;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--amber), transparent);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    #viewfinder.scanning #scan-line {
+      opacity: 0.7;
+      animation: scan 2.2s linear infinite;
+    }
+    @keyframes scan {
+      0%   { top: 20%; }
+      100% { top: 66%; }
+    }
+
+    /* ── TOP BAR ─────────────────────────────────────── */
+    #top-bar {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      padding: calc(var(--safe-top) + 8px) 20px 16px;
+      background: linear-gradient(to bottom, rgba(0,0,0,0.75) 0%, transparent 100%);
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    #app-title {
+      font-family: 'Lora', serif;
+      font-size: 24px;
+      font-weight: 400;
+      color: var(--warm);
+      letter-spacing: 0.01em;
+    }
+
+    #page-counter {
+      font-size: 11px;
+      font-weight: 300;
+      letter-spacing: 0.14em;
+      color: var(--amber);
+      text-transform: uppercase;
+      opacity: 0;
+      transition: opacity 0.4s;
+    }
+    #page-counter.visible { opacity: 1; }
+
+    #status-dot {
+      width: 9px; height: 9px;
+      border-radius: 50%;
+      background: var(--red);
+      box-shadow: 0 0 6px var(--red);
+      transition: background 0.4s, box-shadow 0.4s;
+    }
+    #status-dot.live {
+      background: var(--green);
+      box-shadow: 0 0 6px var(--green);
+      animation: blink 2.5s infinite;
+    }
+    #status-dot.thinking {
+      background: var(--amber);
+      box-shadow: 0 0 12px var(--amber);
+      animation: throb 0.7s infinite;
+    }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.35} }
+    @keyframes throb { 0%,100%{transform:scale(1)} 50%{transform:scale(1.6)} }
+
+    /* ── MULTI-PAGE BAR ──────────────────────────────── */
+    #multi-bar {
+      position: fixed;
+      top: calc(var(--safe-top) + 64px);
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 20;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      background: var(--overlay);
+      border: 1px solid var(--amber);
+      border-radius: 30px;
+      padding: 7px 18px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.4s;
+    }
+    #multi-bar.active { opacity: 1; }
+    #multi-bar-text {
+      font-size: 11px;
+      letter-spacing: 0.14em;
+      color: var(--amber);
+      text-transform: uppercase;
+    }
+    .mini-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--amber);
+      opacity: 0.25;
+      transition: opacity 0.25s;
+    }
+    .mini-dot.captured { opacity: 1; }
+
+    /* ── SPEECH BUBBLE ───────────────────────────────── */
+    #bubble-wrap {
+      position: fixed;
+      bottom: calc(var(--safe-bottom) + 140px);
+      left: 16px; right: 16px;
+      z-index: 20;
+      pointer-events: none;
+    }
+
+    #speech-bubble {
+      background: var(--overlay);
+      border-left: 4px solid var(--amber);
+      border-radius: 0 16px 16px 0;
+      padding: 18px 22px;
+      font-size: 22px;
+      font-family: 'Lora', serif;
+      font-weight: 400;
+      line-height: 1.45;
+      color: var(--warm);
+      min-height: 68px;
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      transform: translateY(6px);
+      opacity: 0;
+      transition: opacity 0.35s ease, transform 0.35s ease, border-color 0.3s;
+    }
+    #speech-bubble.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    #speech-bubble.speaking { border-color: var(--green); }
+    #speech-bubble.guidance { border-color: var(--amber); font-size: 20px; }
+
+    /* Waveform */
+    #waveform {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      height: 18px;
+      margin-top: 10px;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    #waveform.active { opacity: 1; }
+    .wave-bar {
+      width: 3px;
+      border-radius: 2px;
+      background: var(--amber);
+      animation: wave 0.8s ease-in-out infinite;
+    }
+    .wave-bar:nth-child(1) { animation-delay: 0s; }
+    .wave-bar:nth-child(2) { animation-delay: 0.1s; }
+    .wave-bar:nth-child(3) { animation-delay: 0.2s; }
+    .wave-bar:nth-child(4) { animation-delay: 0.15s; }
+    .wave-bar:nth-child(5) { animation-delay: 0.05s; }
+    @keyframes wave {
+      0%,100% { height: 3px; }
+      50%      { height: 16px; }
+    }
+
+    /* ── MIC RING ────────────────────────────────────── */
+    #mic-ring {
+      position: fixed;
+      bottom: calc(var(--safe-bottom) + 138px);
+      left: 50%;
+      transform: translateX(-50%);
+      width: 72px; height: 72px;
+      border-radius: 50%;
+      border: 2px solid var(--amber);
+      opacity: 0;
+      transition: opacity 0.4s;
+      pointer-events: none;
+      z-index: 15;
+    }
+    #mic-ring.active {
+      opacity: 0.35;
+      animation: ring-pulse 1.8s ease-in-out infinite;
+    }
+    @keyframes ring-pulse {
+      0%,100% { transform: translateX(-50%) scale(1); opacity: 0.35; }
+      50%      { transform: translateX(-50%) scale(1.4); opacity: 0.08; }
+    }
+
+    /* ── BOTTOM CONTROLS ─────────────────────────────── */
+    #controls {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      padding: 14px 24px calc(var(--safe-bottom) + 14px);
+      background: linear-gradient(to top, rgba(0,0,0,0.88) 0%, transparent 100%);
+      z-index: 20;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      align-items: center;
+    }
+
+    #mode-label {
+      font-size: 11px;
+      font-weight: 300;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: rgba(242,234,217,0.4);
+      text-align: center;
+    }
+
+    #btn-row {
+      display: flex;
+      gap: 14px;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+    }
+
+    .btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 5px;
+      background: rgba(242,234,217,0.07);
+      border: 1px solid rgba(242,234,217,0.12);
+      border-radius: 18px;
+      padding: 14px 18px;
+      color: var(--warm);
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      font-weight: 300;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      cursor: pointer;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      transition: all 0.2s ease;
+      min-width: 72px;
+    }
+    .btn svg { width: 26px; height: 26px; }
+    .btn:active { transform: scale(0.91); background: rgba(242,234,217,0.14); }
+
+    .btn-primary {
+      background: var(--amber);
+      border-color: var(--amber);
+      color: #18140f;
+      min-width: 96px;
+      padding: 18px 24px;
+    }
+    .btn-primary svg { width: 30px; height: 30px; }
+    .btn-primary:active { background: #b36e1c; }
+
+    .btn.active {
+      background: var(--amber-soft);
+      border-color: var(--amber);
+      color: var(--amber);
+    }
+
+    /* Repeat button */
+    #btn-repeat {
+      display: none;
+    }
+    #btn-repeat.visible { display: flex; }
+
+    /* ── FLASH ───────────────────────────────────────── */
+    #flash {
+      position: fixed; inset: 0;
+      background: #fff;
+      z-index: 50;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.04s;
+    }
+    #flash.on { opacity: 1; }
+
+    /* ── TOAST ───────────────────────────────────────── */
+    #toast {
+      position: fixed;
+      top: calc(var(--safe-top) + 14px);
+      left: 50%;
+      transform: translateX(-50%) translateY(-72px);
+      background: var(--overlay);
+      border: 1px solid rgba(217,136,42,0.35);
+      border-radius: 30px;
+      padding: 9px 22px;
+      font-size: 12px;
+      color: var(--amber);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      z-index: 60;
+      transition: transform 0.4s cubic-bezier(0.32,0.72,0,1);
+      white-space: nowrap;
+    }
+    #toast.show { transform: translateX(-50%) translateY(0); }
+
+    /* ── DOCUMENT DRAWER ─────────────────────────────── */
+    #drawer {
+      position: fixed; inset: 0;
+      z-index: 30;
+      transform: translateY(100%);
+      transition: transform 0.42s cubic-bezier(0.32,0.72,0,1);
+      display: flex;
+      flex-direction: column;
+    }
+    #drawer.open { transform: translateY(0); }
+
+    #drawer-backdrop {
+      position: absolute; inset: 0;
+      background: rgba(0,0,0,0.65);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+    }
+
+    #drawer-sheet {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      background: #1a160f;
+      border-radius: 22px 22px 0 0;
+      border-top: 1px solid rgba(217,136,42,0.2);
+      padding: 0 0 calc(var(--safe-bottom) + 16px);
+      max-height: 80vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    #drawer-handle {
+      width: 40px; height: 4px;
+      background: rgba(242,234,217,0.18);
+      border-radius: 2px;
+      margin: 14px auto 18px;
+      flex-shrink: 0;
+    }
+
+    #drawer-title {
+      font-family: 'Lora', serif;
+      font-size: 20px;
+      font-weight: 400;
+      color: var(--warm);
+      padding: 0 22px 14px;
+      border-bottom: 1px solid rgba(242,234,217,0.08);
+      flex-shrink: 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    #drawer-close {
+      font-size: 12px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--amber);
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-family: 'DM Mono', monospace;
+      padding: 4px;
+    }
+
+    #page-pills {
+      display: flex;
+      gap: 7px;
+      padding: 14px 22px;
+      overflow-x: auto;
+      flex-shrink: 0;
+      scrollbar-width: none;
+    }
+    #page-pills::-webkit-scrollbar { display: none; }
+
+    .page-pill {
+      flex-shrink: 0;
+      padding: 6px 14px;
+      border-radius: 20px;
+      background: rgba(242,234,217,0.06);
+      border: 1px solid rgba(242,234,217,0.1);
+      font-size: 12px;
+      font-family: 'DM Mono', monospace;
+      color: rgba(242,234,217,0.6);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .page-pill.active {
+      background: var(--amber-soft);
+      border-color: var(--amber);
+      color: var(--amber);
+    }
+
+    #drawer-content {
+      padding: 14px 22px;
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    #doc-text-display {
+      font-family: 'Lora', serif;
+      font-size: 16px;
+      line-height: 1.8;
+      color: rgba(242,234,217,0.75);
+      white-space: pre-wrap;
+    }
+
+    /* ── PROCESSING OVERLAY ──────────────────────────── */
+    #processing {
+      position: fixed; inset: 0;
+      background: rgba(18,14,10,0.86);
+      z-index: 40;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 24px;
+    }
+    #processing.active { display: flex; }
+
+    .spinner {
+      width: 60px; height: 60px;
+      border: 3px solid rgba(242,234,217,0.12);
+      border-top-color: var(--amber);
+      border-radius: 50%;
+      animation: spin 0.85s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    #processing-text {
+      font-size: 20px;
+      font-family: 'Lora', serif;
+      font-weight: 400;
+      color: var(--dim);
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+<!-- SPLASH -->
+<div id="splash">
+  <h1>Reader</h1>
+  <p>Your reading companion for documents, bills, and mail. Point your camera and ask anything.</p>
+  <button id="splash-btn" onclick="startApp()">Open Reader</button>
+  <p class="splash-hint">Requires camera &amp; microphone · Safari on iPhone</p>
+</div>
+
+<!-- FLASH -->
+<div id="flash"></div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<!-- CAMERA -->
+<div id="camera-wrap">
+  <video id="video" autoplay playsinline muted></video>
+</div>
+
+<!-- VIEWFINDER -->
+<div id="viewfinder">
+  <div class="vf-corner tl"></div>
+  <div class="vf-corner tr"></div>
+  <div class="vf-corner bl"></div>
+  <div class="vf-corner br"></div>
+  <div id="scan-line"></div>
+</div>
+
+<!-- MULTI-PAGE BAR -->
+<div id="multi-bar">
+  <span id="multi-bar-text">Multi-page</span>
+  <div id="mini-dots-row" style="display:flex;gap:5px;"></div>
+</div>
+
+<!-- TOP BAR -->
+<div id="top-bar">
+  <span id="app-title">Reader</span>
+  <span id="page-counter"></span>
+  <div id="status-dot"></div>
+</div>
+
+<!-- MIC RING -->
+<div id="mic-ring"></div>
+
+<!-- SPEECH BUBBLE -->
+<div id="bubble-wrap">
+  <div id="speech-bubble">
+    <span id="bubble-text"></span>
+    <div id="waveform">
+      <div class="wave-bar"></div>
+      <div class="wave-bar"></div>
+      <div class="wave-bar"></div>
+      <div class="wave-bar"></div>
+      <div class="wave-bar"></div>
+    </div>
+  </div>
+</div>
+
+<!-- CONTROLS -->
+<div id="controls">
+  <div id="mode-label">Ready to read</div>
+  <div id="btn-row">
+
+    <button class="btn" id="btn-multi" onclick="toggleMultiMode()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="2" y="4" width="8" height="13" rx="1.5"/>
+        <rect x="14" y="4" width="8" height="13" rx="1.5"/>
+        <path d="M6 20h12" stroke-linecap="round"/>
+      </svg>
+      Multi
+    </button>
+
+    <button class="btn btn-primary" id="btn-capture" onclick="captureFrame()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="12" r="4" fill="currentColor"/>
+        <path d="M9 2h6l1.5 2.5H20a2 2 0 012 2v13a2 2 0 01-2 2H4a2 2 0 01-2-2v-13a2 2 0 012-2h3.5L9 2z"/>
+      </svg>
+      Read
+    </button>
+
+    <button class="btn" id="btn-doc" onclick="openDrawer()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+        <polyline points="14 2 14 8 20 8"/>
+        <line x1="8" y1="13" x2="16" y2="13"/>
+        <line x1="8" y1="17" x2="16" y2="17"/>
+      </svg>
+      Doc
+    </button>
+
+    <button class="btn" id="btn-repeat" onclick="repeatLast()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <polyline points="17 1 21 5 17 9"/>
+        <path d="M3 11V9a4 4 0 014-4h14M7 23l-4-4 4-4"/>
+        <path d="M21 13v2a4 4 0 01-4 4H3"/>
+      </svg>
+      Repeat
+    </button>
+
+  </div>
+</div>
+
+<!-- DOCUMENT DRAWER -->
+<div id="drawer">
+  <div id="drawer-backdrop" onclick="closeDrawer()"></div>
+  <div id="drawer-sheet">
+    <div id="drawer-handle"></div>
+    <div id="drawer-title">
+      <span>Document</span>
+      <button id="drawer-close" onclick="closeDrawer()">Done</button>
+    </div>
+    <div id="page-pills"></div>
+    <div id="drawer-content">
+      <div id="doc-text-display">No document captured yet.</div>
+    </div>
+  </div>
+</div>
+
+
+<!-- CAPTURE BADGE -->
+<div id="capture-badge">
+  ✓ Captured
+  <span class="badge-sub" id="capture-badge-sub"></span>
+</div>
+
+<!-- PROCESSING -->
+<div id="processing">
+  <div class="spinner"></div>
+  <p id="processing-text">Reading your document…</p>
+</div>
+
+<script>
+// ── CONFIGURATION ─────────────────────────────────────────────
+// Replace with your Cloudflare Worker URL after deploying worker.js
+const WORKER_URL = 'https://ireader.dnotwicz.workers.dev';
+
+// ── STATE ─────────────────────────────────────────────────────
+const state = {
+  phase:           'idle',   // idle | listening | capturing | conversation
+  synth:           window.speechSynthesis,
+  recognition:     null,
+  isListening:     false,
+  isSpeaking:      false,
+  isProcessing:    false,
+  multiMode:       false,
+  capturedPages:   [],       // [{index, text, summary, paragraphs[], sections[]}]
+  conversationHistory: [],
+  activePage:      0,
+  lastSpoken:      '',
+  // Navigation cursors
+  nav: {
+    pageIdx:      0,   // which page (article) we're reading
+    paragraphIdx: 0,   // which paragraph within current page
+    sectionIdx:   0,   // which section within current page
+  },
+};
+
+// ── DOM REFS ──────────────────────────────────────────────────
+const video        = document.getElementById('video');
+const viewfinder   = document.getElementById('viewfinder');
+const statusDot    = document.getElementById('status-dot');
+const speechBubble = document.getElementById('speech-bubble');
+const bubbleText   = document.getElementById('bubble-text');
+const waveform     = document.getElementById('waveform');
+const modeLabel    = document.getElementById('mode-label');
+const pageCounter  = document.getElementById('page-counter');
+const multiBar     = document.getElementById('multi-bar');
+const miniDotsRow  = document.getElementById('mini-dots-row');
+const micRing      = document.getElementById('mic-ring');
+const btnRepeat    = document.getElementById('btn-repeat');
+
+// ── START APP ─────────────────────────────────────────────────
+async function startApp() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+      audio: false,
+    });
+    video.srcObject = stream;
+    await video.play();
+
+    document.getElementById('splash').style.display = 'none';
+    setStatus('live');
+
+    setTimeout(() => {
+      speak('Reader is ready. Hold any document up to the camera and say "Read this" to capture it. You can then say "summarize", "next paragraph", "next section", or ask me anything about the document. For multiple pages, say "Multiple pages", then "next" for each page and "done" when finished.');
+      startListening();
+    }, 600);
+  } catch (e) {
+    alert('Camera access is required. Please allow camera in Safari Settings.');
+  }
+}
+
+// ── SPEECH SYNTHESIS ─────────────────────────────────────────
+function speak(text, onEnd) {
+  if (!text) return;
+  state.synth.cancel();
+  state.isSpeaking = true;
+  state.lastSpoken = text;
+
+  showBubble(text, 'speaking');
+  waveform.classList.add('active');
+  setStatus('thinking');
+  btnRepeat.classList.add('visible');
+
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.rate   = 0.90;
+  utterance.pitch  = 1.0;
+  utterance.volume = 1.0;
+
+  const voices = state.synth.getVoices();
+  const preferred = voices.find(v =>
+    v.name.includes('Samantha') || v.name.includes('Karen') ||
+    v.name.includes('Moira')    || v.name.includes('Daniel')
+  ) || voices.find(v => v.lang.startsWith('en'));
+  if (preferred) utterance.voice = preferred;
+
+  utterance.onend = () => {
+    state.isSpeaking = false;
+    waveform.classList.remove('active');
+    setStatus('live');
+    hideBubbleDelayed();
+    if (onEnd) onEnd();
+  };
+
+  state.synth.speak(utterance);
+}
+
+function repeatLast() {
+  if (state.lastSpoken) speak(state.lastSpoken);
+}
+
+// Bubble helpers
+let _hideTimer;
+function showBubble(text, type) {
+  clearTimeout(_hideTimer);
+  bubbleText.textContent = text;
+  speechBubble.className = 'visible ' + (type || '');
+}
+function hideBubbleDelayed(ms = 9000) {
+  clearTimeout(_hideTimer);
+  _hideTimer = setTimeout(() => {
+    if (!state.isSpeaking) speechBubble.className = '';
+  }, ms);
+}
+
+// ── CONTINUOUS VOICE RECOGNITION ─────────────────────────────
+function startListening() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { showToast('Voice not available — use Safari'); return; }
+
+  state.recognition = new SR();
+  state.recognition.continuous     = true;
+  state.recognition.interimResults  = false;
+  state.recognition.lang            = 'en-US';
+
+  state.recognition.onstart = () => {
+    state.isListening = true;
+    micRing.classList.add('active');
+  };
+
+  state.recognition.onresult = (event) => {
+    const last = event.results[event.results.length - 1];
+    if (last.isFinal) {
+      const t = last[0].transcript.trim().toLowerCase();
+      handleVoiceCommand(t);
+    }
+  };
+
+  state.recognition.onend = () => {
+    state.isListening = false;
+    micRing.classList.remove('active');
+    if (!state.isProcessing) {
+      setTimeout(() => startListening(), 500);
+    }
+  };
+
+  state.recognition.onerror = (e) => {
+    if (e.error !== 'no-speech') {
+      setTimeout(() => startListening(), 1000);
+    }
+  };
+
+  state.recognition.start();
+}
+
+// ── VOICE COMMAND HANDLER ─────────────────────────────────────
+function handleVoiceCommand(t) {
+  // Any speech — interrupt if currently speaking
+  if (state.isSpeaking) {
+    state.synth.cancel();
+    state.isSpeaking = false;
+    waveform.classList.remove('active');
+    setStatus('live');
+    return;
+  }
+
+  // ── CAPTURE: "read this", "read it", "scan this", "capture"
+  if (/\bread( this| it)?\b|\bscan( this)?\b|\bcapture\b/.test(t)) {
+    captureFrame();
+    return;
+  }
+
+  // ── MULTI-PAGE: start mode
+  if (/multiple pages?|multi.?page/.test(t)) {
+    if (!state.multiMode) toggleMultiMode();
+    return;
+  }
+
+  // ── SUMMARIZE: "summarize", "summary", "give me a summary"
+  if (/\bsummar(ize|y)\b/.test(t)) {
+    summarizeDocument();
+    return;
+  }
+
+  // ── PARAGRAPH NAVIGATION
+  // "next paragraph", "next", "continue" (when not in multi mode)
+  if (/next paragraph|next para/.test(t)) {
+    navigateParagraph(1);
+    return;
+  }
+  if (/previous paragraph|last paragraph|prev para/.test(t)) {
+    navigateParagraph(-1);
+    return;
+  }
+
+  // ── SECTION NAVIGATION
+  if (/next section/.test(t)) {
+    navigateSection(1);
+    return;
+  }
+  if (/previous section|last section|prev section/.test(t)) {
+    navigateSection(-1);
+    return;
+  }
+
+  // ── ARTICLE / PAGE NAVIGATION (also handles multi-mode "next" / "done")
+  if (/next article|next page/.test(t) || (/\bnext\b/.test(t) && state.multiMode)) {
+    if (state.multiMode) {
+      captureFrame();
+    } else {
+      navigateArticle(1);
+    }
+    return;
+  }
+  if (/previous article|previous page|last article|last page/.test(t)) {
+    navigateArticle(-1);
+    return;
+  }
+
+  // ── DONE (multi-page)
+  if (/\bdone\b/.test(t) && state.multiMode) {
+    finishMultiCapture();
+    return;
+  }
+
+  // ── REPEAT
+  if (/\brepeat\b|\bagain\b/.test(t)) {
+    repeatLast();
+    return;
+  }
+
+  // ── SHOW DOC DRAWER
+  if (/show doc|open doc|view doc|show text/.test(t)) {
+    openDrawer();
+    return;
+  }
+
+  // ── CLEAR
+  if (/\bclear\b|\breset\b|new doc|new document/.test(t)) {
+    clearAll();
+    return;
+  }
+
+  // ── CONVERSATIONAL QUESTION (fallthrough)
+  if (state.conversationHistory.length > 0 && t.length > 3) {
+    askQuestion(t);
+  }
+}
+
+// ── CAPTURE FRAME ─────────────────────────────────────────────
+async function captureFrame() {
+  if (state.isProcessing) { showToast('Still processing…'); return; }
+
+  // Flash
+  const flash = document.getElementById('flash');
+  flash.classList.add('on');
+  setTimeout(() => flash.classList.remove('on'), 70);
+
+  // Capture video frame
+  const canvas = document.createElement('canvas');
+  canvas.width  = video.videoWidth  || 1280;
+  canvas.height = video.videoHeight || 720;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+  const imageData = canvas.toDataURL('image/jpeg', 0.92).split(',')[1];
+
+  state.isProcessing = true;
+  setStatus('thinking');
+  viewfinder.classList.add('scanning');
+  setModeLabel('Reading…');
+  showProcessing('Reading your document…');
+
+  try {
+    const pageNum = state.capturedPages.length + 1;
+    const result  = await ocrWithClaude(imageData, pageNum);
+
+    state.capturedPages.push({
+      index:      pageNum,
+      text:       result.text,
+      summary:    result.summary,
+      overview:   result.overview,
+      paragraphs: parseParagraphs(result.text),
+      sections:   parseSections(result.text),
+    });
+
+    hideProcessing();
+    showCaptureBadge(pageNum);
+
+    if (state.multiMode) {
+      updateMiniDots();
+      setModeLabel(`Page ${pageNum} captured — say "Next" or "Done"`);
+      speak(`Okay. Page ${pageNum} captured.`);
+    } else {
+      state.nav = { pageIdx: 0, paragraphIdx: 0, sectionIdx: 0 };
+      buildConversationContext();
+      updatePageCounter();
+      setModeLabel('Ask me anything about this document');
+      speak(result.overview);
+    }
+
+  } catch (e) {
+    hideProcessing();
+    speak('I had trouble reading that. Try moving to better light and holding the document flat.');
+    setModeLabel('Try again — check lighting');
+  }
+
+  state.isProcessing = false;
+  setStatus('live');
+  viewfinder.classList.remove('scanning');
+}
+
+// ── CAPTURE CONFIRMATION ──────────────────────────────────────
+function showCaptureBadge(pageNum) {
+  const badge = document.getElementById('capture-badge');
+  const sub   = document.getElementById('capture-badge-sub');
+  badge.firstChild.textContent = '✓ Captured';
+  sub.textContent = pageNum > 1 ? `Page ${pageNum}` : 'Page 1';
+
+  // Green viewfinder flash
+  viewfinder.classList.remove('scanning');
+  viewfinder.classList.add('captured');
+
+  badge.classList.add('show');
+
+  setTimeout(() => {
+    badge.classList.remove('show');
+    viewfinder.classList.remove('captured');
+  }, 1600);
+}
+
+// ── TEXT STRUCTURE PARSERS ────────────────────────────────────
+// Paragraphs: split on double newlines or single newlines, filter empties
+function parseParagraphs(text) {
+  return text
+    .split(/\n\n+/)
+    .map(p => p.replace(/\n/g, ' ').trim())
+    .filter(p => p.length > 10);
+}
+
+// Sections: lines that look like headings (short, possibly ALL CAPS, or followed by a newline)
+// Fall back to splitting every ~5 paragraphs if no headings detected
+function parseSections(text) {
+  const lines = text.split('\n');
+  const headingIndices = [];
+
+  lines.forEach((line, i) => {
+    const trimmed = line.trim();
+    if (!trimmed) return;
+    const isShort   = trimmed.length < 60;
+    const isAllCaps = trimmed === trimmed.toUpperCase() && /[A-Z]/.test(trimmed);
+    const nextEmpty = !lines[i + 1] || lines[i + 1].trim() === '';
+    if (isShort && (isAllCaps || nextEmpty)) {
+      headingIndices.push(i);
+    }
+  });
+
+  if (headingIndices.length >= 2) {
+    const sections = [];
+    headingIndices.forEach((start, idx) => {
+      const end   = headingIndices[idx + 1] ?? lines.length;
+      const chunk = lines.slice(start, end).join(' ').replace(/\s+/g, ' ').trim();
+      if (chunk.length > 10) sections.push(chunk);
+    });
+    return sections;
+  }
+
+  // No clear headings — group paragraphs into chunks of ~4
+  const paras = parseParagraphs(text);
+  const sections = [];
+  for (let i = 0; i < paras.length; i += 4) {
+    sections.push(paras.slice(i, i + 4).join(' '));
+  }
+  return sections.length > 0 ? sections : [text];
+}
+
+// ── DOCUMENT NAVIGATION ───────────────────────────────────────
+function navigateParagraph(direction) {
+  if (state.capturedPages.length === 0) {
+    speak('No document captured yet. Say "read this" to scan one.');
+    return;
+  }
+  const page = state.capturedPages[state.nav.pageIdx];
+  if (!page) return;
+
+  const paras = page.paragraphs;
+  state.nav.paragraphIdx += direction;
+
+  if (state.nav.paragraphIdx < 0) {
+    // Go to previous page if possible
+    if (state.nav.pageIdx > 0) {
+      state.nav.pageIdx--;
+      const prevPage = state.capturedPages[state.nav.pageIdx];
+      state.nav.paragraphIdx = prevPage.paragraphs.length - 1;
+      speak(`Page ${state.nav.pageIdx + 1}. ${prevPage.paragraphs[state.nav.paragraphIdx]}`);
+    } else {
+      state.nav.paragraphIdx = 0;
+      speak('That\'s the beginning of the document.');
+    }
+    return;
+  }
+
+  if (state.nav.paragraphIdx >= paras.length) {
+    // Try next page
+    if (state.nav.pageIdx < state.capturedPages.length - 1) {
+      state.nav.pageIdx++;
+      state.nav.paragraphIdx = 0;
+      const nextPage = state.capturedPages[state.nav.pageIdx];
+      speak(`Continuing to page ${state.nav.pageIdx + 1}. ${nextPage.paragraphs[0]}`);
+    } else {
+      state.nav.paragraphIdx = paras.length - 1;
+      speak('That\'s the end of the document.');
+    }
+    return;
+  }
+
+  speak(paras[state.nav.paragraphIdx]);
+}
+
+function navigateSection(direction) {
+  if (state.capturedPages.length === 0) {
+    speak('No document captured yet. Say "read this" to scan one.');
+    return;
+  }
+  const page = state.capturedPages[state.nav.pageIdx];
+  if (!page) return;
+
+  const sections = page.sections;
+  state.nav.sectionIdx += direction;
+
+  if (state.nav.sectionIdx < 0) {
+    if (state.nav.pageIdx > 0) {
+      state.nav.pageIdx--;
+      const prevPage = state.capturedPages[state.nav.pageIdx];
+      state.nav.sectionIdx = prevPage.sections.length - 1;
+      speak(`Page ${state.nav.pageIdx + 1}. ${prevPage.sections[state.nav.sectionIdx]}`);
+    } else {
+      state.nav.sectionIdx = 0;
+      speak('That\'s the first section.');
+    }
+    return;
+  }
+
+  if (state.nav.sectionIdx >= sections.length) {
+    if (state.nav.pageIdx < state.capturedPages.length - 1) {
+      state.nav.pageIdx++;
+      state.nav.sectionIdx = 0;
+      const nextPage = state.capturedPages[state.nav.pageIdx];
+      speak(`Page ${state.nav.pageIdx + 1}. ${nextPage.sections[0]}`);
+    } else {
+      state.nav.sectionIdx = sections.length - 1;
+      speak('That\'s the last section.');
+    }
+    return;
+  }
+
+  speak(sections[state.nav.sectionIdx]);
+}
+
+function navigateArticle(direction) {
+  if (state.capturedPages.length === 0) {
+    speak('No document captured yet.');
+    return;
+  }
+
+  state.nav.pageIdx += direction;
+
+  if (state.nav.pageIdx < 0) {
+    state.nav.pageIdx = 0;
+    speak('That\'s the first page.');
+    return;
+  }
+  if (state.nav.pageIdx >= state.capturedPages.length) {
+    state.nav.pageIdx = state.capturedPages.length - 1;
+    speak('That\'s the last page.');
+    return;
+  }
+
+  // Reset paragraph and section cursors when jumping pages
+  state.nav.paragraphIdx = 0;
+  state.nav.sectionIdx   = 0;
+  const page = state.capturedPages[state.nav.pageIdx];
+  speak(`Page ${state.nav.pageIdx + 1}. ${page.summary}`);
+}
+
+function summarizeDocument() {
+  if (state.capturedPages.length === 0) {
+    speak('No document captured yet. Say "read this" to scan one.');
+    return;
+  }
+  if (state.capturedPages.length === 1) {
+    speak(state.capturedPages[0].summary);
+  } else {
+    const summaries = state.capturedPages
+      .map(p => `Page ${p.index}: ${p.summary}`)
+      .join(' ');
+    speak(summaries);
+  }
+}
+
+// ── OCR via CLAUDE VISION ─────────────────────────────────────
+async function ocrWithClaude(base64Image, pageNum) {
+  const response = await fetch(WORKER_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'claude-opus-4-5',
+      max_tokens: 2000,
+      messages: [{
+        role: 'user',
+        content: [
+          {
+            type: 'image',
+            source: { type: 'base64', media_type: 'image/jpeg', data: base64Image },
+          },
+          {
+            type: 'text',
+            text: `You are an OCR and reading assistant for someone with limited vision. This is page ${pageNum}.
+
+TASK 1 — TRANSCRIBE: Extract ALL text from this image exactly as written. Preserve structure (headings, columns, lists). Output clean readable text.
+
+TASK 2 — OVERVIEW: Write a single spoken sentence identifying what this document is and its date, if visible. Focus only on document type and date — nothing else. Examples: "This is an electric bill from National Grid, dated March 2026." or "This looks like a two-page letter from the Department of Motor Vehicles, undated." Natural spoken English, no markdown.
+
+TASK 3 — SUMMARY: Write 1 to 3 sentences covering the most important information in the document — amounts due, actions required, key facts. Natural spoken English, spell out numbers and dates as words.
+
+Respond ONLY as valid JSON:
+{"text": "full transcribed text", "overview": "one sentence doc type and date", "summary": "key facts summary"}`,
+          },
+        ],
+      }],
+    }),
+  });
+
+  if (!response.ok) throw new Error('Worker error ' + response.status);
+
+  const data    = await response.json();
+  const content = data.content?.[0]?.text || '';
+
+  try {
+    const parsed = JSON.parse(content.replace(/```json|```/g, '').trim());
+    return {
+      text:     parsed.text     || content,
+      summary:  parsed.summary  || "I've read the document. Ask me anything about it.",
+      overview: parsed.overview || parsed.summary || "Okay. Document captured.",
+    };
+  } catch {
+    return {
+      text:     content,
+      summary:  "I've read the document. Ask me anything about it.",
+      overview: "Okay. Document captured.",
+    };
+  }
+}
+
+// ── MULTI-PAGE ────────────────────────────────────────────────
+function toggleMultiMode() {
+  state.multiMode = !state.multiMode;
+  const btn = document.getElementById('btn-multi');
+
+  if (state.multiMode) {
+    btn.classList.add('active');
+    multiBar.classList.add('active');
+    state.capturedPages   = [];
+    state.conversationHistory = [];
+    miniDotsRow.innerHTML = '';
+    setModeLabel('Multi-page — say "Read this" for each page');
+    speak('Multi-page mode is on. Say "read this" to capture each page as you turn through. Say "done" when you\'ve captured all pages.');
+  } else {
+    btn.classList.remove('active');
+    multiBar.classList.remove('active');
+    setModeLabel('Ready to read');
+  }
+}
+
+function updateMiniDots() {
+  miniDotsRow.innerHTML = '';
+  state.capturedPages.forEach(() => {
+    const d = document.createElement('div');
+    d.className = 'mini-dot captured';
+    miniDotsRow.appendChild(d);
+  });
+  // Next empty slot
+  const next = document.createElement('div');
+  next.className = 'mini-dot';
+  miniDotsRow.appendChild(next);
+}
+
+function finishMultiCapture() {
+  state.multiMode = false;
+  document.getElementById('btn-multi').classList.remove('active');
+  multiBar.classList.remove('active');
+  state.nav = { pageIdx: 0, paragraphIdx: 0, sectionIdx: 0 };
+  buildConversationContext();
+  updatePageCounter();
+  const n = state.capturedPages.length;
+  setModeLabel(`${n} page${n > 1 ? 's' : ''} captured — ask me anything`);
+  const overviews = state.capturedPages.map((p, i) => `Page ${i + 1}: ${p.overview}`).join(' ');
+  speak(`Okay. ${n} page${n > 1 ? 's' : ''} captured. ${overviews}`);
+}
+
+// ── CONVERSATION ──────────────────────────────────────────────
+function buildConversationContext() {
+  const allText = state.capturedPages
+    .map(p => `=== PAGE ${p.index} ===\n${p.text}`)
+    .join('\n\n');
+
+  state.conversationHistory = [
+    {
+      role: 'user',
+      content: `Here is the full text of a document captured from a camera. Please remember this:\n\n${allText}`,
+    },
+    {
+      role: 'assistant',
+      content: 'I\'ve read and saved this document. Ready for any questions.',
+    },
+  ];
+
+  updateDocDrawer();
+}
+
+async function askQuestion(question) {
+  if (state.conversationHistory.length === 0) {
+    speak('Please capture a document first. Say "read this" or tap Read.');
+    return;
+  }
+
+  state.isProcessing = true;
+  setStatus('thinking');
+  showBubble('Thinking…', 'guidance');
+  showProcessing('Thinking…');
+
+  state.conversationHistory.push({ role: 'user', content: question });
+
+  try {
+    const response = await fetch(WORKER_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-opus-4-5',
+        max_tokens: 512,
+        system: `You are a reading assistant for someone who cannot easily read physical documents. They have scanned a document and are asking about it.
+Answer in 1 to 3 short natural spoken sentences. No markdown, no bullet points.
+Spell out all dollar amounts, phone numbers, account numbers, and dates as words.
+Read phone numbers with pauses: "one eight hundred, five five five, one two three four".
+If the answer is not in the document, say so briefly. Never guess or invent information.`,
+        messages: state.conversationHistory.slice(-8),
+      }),
+    });
+
+    const data  = await response.json();
+    const reply = data.content?.[0]?.text || "I'm not sure. Try asking a different way.";
+
+    state.conversationHistory.push({ role: 'assistant', content: reply });
+    hideProcessing();
+    speak(reply);
+
+  } catch (e) {
+    hideProcessing();
+    speak('I had a connection issue. Please try again.');
+  }
+
+  state.isProcessing = false;
+  setStatus('live');
+}
+
+// ── DOCUMENT DRAWER ───────────────────────────────────────────
+function openDrawer() {
+  updateDocDrawer();
+  document.getElementById('drawer').classList.add('open');
+}
+
+function closeDrawer() {
+  document.getElementById('drawer').classList.remove('open');
+}
+
+function updateDocDrawer() {
+  const pills   = document.getElementById('page-pills');
+  const display = document.getElementById('doc-text-display');
+
+  if (state.capturedPages.length === 0) {
+    pills.innerHTML = '';
+    display.textContent = 'No document captured yet.';
+    return;
+  }
+
+  pills.innerHTML = state.capturedPages
+    .map((p, i) => `<div class="page-pill ${i === state.activePage ? 'active' : ''}" onclick="selectPage(${i})">Pg ${p.index}</div>`)
+    .join('');
+
+  display.textContent = state.capturedPages[state.activePage]?.text || '';
+}
+
+function selectPage(i) {
+  state.activePage = i;
+  updateDocDrawer();
+}
+
+// ── CLEAR ─────────────────────────────────────────────────────
+function clearAll() {
+  state.capturedPages       = [];
+  state.conversationHistory = [];
+  state.activePage          = 0;
+  state.nav                 = { pageIdx: 0, paragraphIdx: 0, sectionIdx: 0 };
+  pageCounter.classList.remove('visible');
+  btnRepeat.classList.remove('visible');
+  speechBubble.className    = '';
+  setModeLabel('Ready to read');
+  speak('Document cleared. Ready for a new one.');
+}
+
+// ── UI HELPERS ────────────────────────────────────────────────
+function setStatus(s) {
+  statusDot.className = s;
+}
+
+function setModeLabel(text) {
+  modeLabel.textContent = text;
+}
+
+function updatePageCounter() {
+  const n = state.capturedPages.length;
+  if (n > 0) {
+    pageCounter.textContent = `${n} page${n > 1 ? 's' : ''}`;
+    pageCounter.classList.add('visible');
+  }
+}
+
+function showProcessing(text) {
+  document.getElementById('processing-text').textContent = text;
+  document.getElementById('processing').classList.add('active');
+}
+
+function hideProcessing() {
+  document.getElementById('processing').classList.remove('active');
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ── IOS VOICE INIT ────────────────────────────────────────────
+// iOS loads voices lazily — prime them on first touch
+document.addEventListener('touchstart', () => {
+  if (state.synth.getVoices().length === 0) state.synth.getVoices();
+}, { once: true });
+
+window.speechSynthesis.onvoiceschanged = () => { /* voices available */ };
+
+// Prevent scroll bounce
+document.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+</script>
+</body>
+</html>
