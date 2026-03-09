@@ -1048,8 +1048,8 @@ async function captureFrame() {
 
   } catch (e) {
     hideProcessing();
-    speak('I had trouble reading that. Try moving to better light and holding the document flat.');
-    setModeLabel('Try again — check lighting');
+    speak('I had trouble reading that. Please try again.');
+    setModeLabel('Try again');
   }
 
   state.isProcessing = false;
@@ -1264,7 +1264,9 @@ async function ocrWithClaude(base64Image, pageNum) {
             type: 'text',
             text: `You are an OCR and reading assistant for someone with limited vision. This is page ${pageNum}.
 
-TASK 1 — TRANSCRIBE: Extract ALL text from this image exactly as written. Preserve structure (headings, columns, lists). Output clean readable text.
+The document may be held up to the camera at any angle — it does not need to be flat or perfectly framed. Treat all text visible anywhere in the image as the document content, even if the edges are cut off or the page is at an angle.
+
+TASK 1 — TRANSCRIBE: Extract ALL text visible in this image exactly as written. Use the locations of text in the scene to establish the document boundaries — do not look for physical borders or edges. Preserve structure (headings, columns, lists). Output clean readable text.
 
 TASK 2 — OVERVIEW: Write a single spoken sentence identifying what this document is and its date, if visible. Focus only on document type and date — nothing else. Examples: "This is an electric bill from National Grid, dated March 2026." or "This looks like a two-page letter from the Department of Motor Vehicles, undated." Natural spoken English, no markdown.
 
